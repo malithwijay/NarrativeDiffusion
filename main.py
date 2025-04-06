@@ -90,7 +90,9 @@ def process_generation(
     for idx, img in enumerate(comic_images):
         img.save(f"{output_dir}/img{idx + 1}.png")
 
-    return comic_images, list(range(len(gallery_images))), ""
+    panel_choices = [str(i) for i in range(len(gallery_images))]
+    return comic_images, gr.update(choices=panel_choices, value=panel_choices[0]), ""
+
 
 # ====== Panel Refinement ======
 def refine_panel(index, new_prompt, style_name, steps, width, height, guidance_scale):
