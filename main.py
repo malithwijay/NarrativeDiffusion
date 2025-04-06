@@ -92,12 +92,15 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     index = int(index)
     base_prompt = processed_prompts[index]
 
+    # Only append refinement text if provided
     if refinement_text.strip():
         final_prompt = base_prompt + ", " + refinement_text.strip()
     else:
         final_prompt = base_prompt
 
+    # 🛠️ Correctly use selected style
     styled_prompt = apply_style_positive(style_name, final_prompt)
+
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -109,6 +112,7 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
 
     gallery_images[index] = new_image
     return gallery_images
+
 
 
 
