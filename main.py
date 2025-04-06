@@ -4,7 +4,6 @@ import random
 import os
 import datetime
 from PIL import ImageFont
-
 from utils.gradio_utils import (
     character_to_dict,
     process_original_prompt,
@@ -23,6 +22,8 @@ DEFAULT_STYLE_NAME = "Japanese Anime"
 STYLE_NAMES = list(styles.keys())
 models_dict = get_models_dict()
 pipe = None
+gallery_images = []
+caption_texts = []
 
 # ====== Load Comic Model ======
 model_name = "ComicModel"
@@ -34,14 +35,10 @@ pipe.enable_freeu(s1=0.6, s2=0.4, b1=1.1, b2=1.2)
 if device != "mps":
     pipe.enable_model_cpu_offload()
 
-# ====== Core Generation ======
+# ====== Utils ======
 def apply_style_positive(style_name: str, positive: str):
     p, _ = styles.get(style_name, styles[DEFAULT_STYLE_NAME])
     return p.replace("{prompt}", positive)
-
-def apply_style(style_name: str, positives: list, negative: str = ""):
-    p, n = styles.get(style_name, styles[DEFAULT_STYLE_NAME])
-    return [p.replace("{prompt}", pos) for pos in positives], n + " " + negative
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -49,6 +46,7 @@ def setup_seed(seed):
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
 
+# ====== Main Generation Function ======
 def process_generation(
     seed,
     style_name,
@@ -61,15 +59,17 @@ def process_generation(
     guidance_scale,
     comic_type
 ):
-    setup_seed(seed)
-    character_dict, character_list = character_to_dict(general_prompt)
-    prompts = prompt_array.strip().splitlines()
-    
-    prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts]
-    captions = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts]
-    character_index_dict, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
+    global gallery_images, caption_texts
 
-    final_images = []
+    setup_seed(seed)
+    character_dict, _ = character_to_dict(general_prompt)
+    prompts_raw = prompt_array.strip().splitlines()
+    prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
+    caption_texts = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
+
+    _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
+
+    gallery_images = []
     for prompt in processed_prompts:
         styled_prompt = apply_style_positive(style_name, prompt)
         result = pipe(
@@ -79,25 +79,37 @@ def process_generation(
             height=height,
             width=width
         ).images[0]
-        final_images.append(result)
+        gallery_images.append(result)
 
-    # Apply comic layout
     font_path = os.path.join("fonts", font_choice)
     font = ImageFont.truetype(font_path, 40)
-    comic_images = get_comic(final_images, comic_type, captions, font)
+    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    # Save output
     output_dir = f"output/out_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
     os.makedirs(output_dir, exist_ok=True)
     for idx, img in enumerate(comic_images):
         img.save(f"{output_dir}/img{idx + 1}.png")
 
-    return comic_images
+    return comic_images, list(range(len(gallery_images))), ""
 
+# ====== Panel Refinement ======
+def refine_panel(index, new_prompt, style_name, steps, width, height, guidance_scale):
+    global gallery_images
+    styled_prompt = apply_style_positive(style_name, new_prompt)
+    setup_seed(random.randint(0, MAX_SEED))
+    new_image = pipe(
+        styled_prompt,
+        num_inference_steps=steps,
+        guidance_scale=guidance_scale,
+        height=height,
+        width=width
+    ).images[0]
+    gallery_images[index] = new_image
+    return gallery_images
 
 # ====== Gradio UI ======
-with gr.Blocks(title="NarrativeDiffusion") as demo:
-    gr.Markdown("## 🎨 NarrativeDiffusion: Generate Comic-Style Story Panels")
+with gr.Blocks(title="NarrativeDiffusion with Feedback Refinement") as demo:
+    gr.Markdown("## 🎨 NarrativeDiffusion: Generate Comic-Style Story Panels with Feedback Refinement")
 
     with gr.Row():
         with gr.Column():
@@ -115,6 +127,10 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
 
         with gr.Column():
             gallery = gr.Gallery(label="Generated Comic", columns=2, height="auto")
+            gr.Markdown("### 🛠️ Refine a Panel")
+            panel_selector = gr.Dropdown(choices=[], label="Select Panel to Refine")
+            refine_prompt = gr.Textbox(label="New Prompt for Selected Panel", placeholder="A new version of the panel prompt...")
+            refine_btn = gr.Button("Refine Panel ✏️")
 
     run_button.click(
         fn=process_generation,
@@ -130,7 +146,13 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
             guidance,
             comic_type
         ],
-        outputs=gallery
+        outputs=[gallery, panel_selector, refine_prompt]
+    )
+
+    refine_btn.click(
+        fn=refine_panel,
+        inputs=[panel_selector, refine_prompt, style_dropdown, steps, width, height, guidance],
+        outputs=[gallery]
     )
 
 demo.launch(share=True)
