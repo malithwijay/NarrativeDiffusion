@@ -87,18 +87,21 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
 
 # ===== Feedback Refinement Function =====
 def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
-    global gallery_images, processed_prompts
+    global gallery_images, processed_prompts, character_dict
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Only append refinement text if provided
-    if refinement_text.strip():
-        final_prompt = base_prompt + ", " + refinement_text.strip()
-    else:
-        final_prompt = base_prompt
+    # Attempt to extract the character tag (e.g., [Tom])
+    character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
+    base_character = character_dict.get(character_tag, "")
 
-    # 🛠️ Correctly use selected style
+    # Combine character base with refinement
+    if refinement_text.strip():
+        final_prompt = f"{character_tag} {base_character}, {refinement_text.strip()}"
+    else:
+        final_prompt = f"{character_tag} {base_character}"
+
     styled_prompt = apply_style_positive(style_name, final_prompt)
 
     setup_seed(random.randint(0, MAX_SEED))
@@ -112,7 +115,6 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
 
     gallery_images[index] = new_image
     return gallery_images
-
 
 
 
