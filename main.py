@@ -30,7 +30,7 @@ caption_texts = []
 character_dict = {}
 processed_prompts = []
 original_prompts = []
-character_registry = {}  # 🆕 Persistent memory of characters and traits
+character_registry = {}  # Stores character traits persistently
 
 # ===== Load Comic Model =====
 model_name = "ComicModel"
@@ -83,7 +83,7 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
     original_prompts = processed_prompts.copy()
 
-    gallery_images = []
+    gallery_images.clear()
     for prompt in processed_prompts:
         styled_prompt = apply_style_positive(style_name, prompt)
         result = pipe(styled_prompt, num_inference_steps=steps,
@@ -105,15 +105,12 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
 
 # ===== Feedback Refinement Function =====
 def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
-    global gallery_images, processed_prompts, character_dict, character_registry
+    global gallery_images, processed_prompts, character_registry
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Extract character tag (e.g., [Tom])
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
-
-    # Update character traits if new trait is added
     if refinement_text.strip():
         entry = character_registry.get(character_tag, {"base": "", "traits": []})
         if refinement_text.strip() not in entry["traits"]:
@@ -124,7 +121,6 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     final_prompt = f"{character_tag} {full_character}. {base_prompt}"
 
     styled_prompt = apply_style_positive(style_name, final_prompt)
-
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -137,9 +133,31 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     gallery_images[index] = new_image
     return gallery_images
 
+# ===== Add New Scene Using Character Registry =====
+def add_new_scene(scene_text, style_name, steps, width, height, guidance_scale):
+    global processed_prompts, gallery_images
+
+    character_tags = [tag for tag in character_registry.keys() if tag in scene_text]
+    full_characters = " ".join([f"{tag} {get_full_character_desc(tag)}" for tag in character_tags])
+    final_prompt = f"{full_characters}. {scene_text.strip()}"
+
+    styled_prompt = apply_style_positive(style_name, final_prompt)
+    setup_seed(random.randint(0, MAX_SEED))
+    new_image = pipe(
+        styled_prompt,
+        num_inference_steps=steps,
+        guidance_scale=guidance_scale,
+        height=height,
+        width=width
+    ).images[0]
+
+    gallery_images.append(new_image)
+    processed_prompts.append(scene_text.strip())
+    return gallery_images
+
 # ===== Gradio UI =====
-with gr.Blocks(title="NarrativeDiffusion with Feedback Refinement & Trait Memory") as demo:
-    gr.Markdown("## 🧠 NarrativeDiffusion: Character Consistency with Trait Memory")
+with gr.Blocks(title="NarrativeDiffusion with Trait Memory & Scene Continuation") as demo:
+    gr.Markdown("## 🎨 NarrativeDiffusion: Character Memory, Mid-story Edits & Scene Extension")
 
     with gr.Row():
         with gr.Column():
@@ -161,23 +179,30 @@ with gr.Blocks(title="NarrativeDiffusion with Feedback Refinement & Trait Memory
 
         with gr.Column():
             gallery = gr.Gallery(label="Generated Comic", columns=2, height="auto")
-            gr.Markdown("### 🔁 Refine a Panel (appearance or traits)")
             panel_selector = gr.Dropdown(choices=[], label="Select Panel to Refine")
-            refine_prompt = gr.Textbox(label="Add Trait or Visual Change", placeholder="Tom now has a wound on his leg")
+            refine_prompt = gr.Textbox(label="Visual/Trait Update (e.g., 'has a bandage')")
             refine_btn = gr.Button("Refine Panel ✏️")
+
+            gr.Markdown("### ➕ Add a New Scene (auto reuses characters and traits)")
+            new_scene_input = gr.Textbox(label="New Scene Prompt (e.g., [Emma] meets a stranger...)")
+            add_scene_btn = gr.Button("➕ Add Scene")
 
     run_button.click(
         fn=process_generation,
-        inputs=[
-            seed, style_dropdown, general_prompt, prompt_array, font_choice,
-            steps, width, height, guidance, comic_type
-        ],
+        inputs=[seed, style_dropdown, general_prompt, prompt_array, font_choice,
+                steps, width, height, guidance, comic_type],
         outputs=[gallery, panel_selector, refine_prompt]
     )
 
     refine_btn.click(
         fn=refine_panel,
         inputs=[panel_selector, refine_prompt, style_dropdown, steps, width, height, guidance],
+        outputs=[gallery]
+    )
+
+    add_scene_btn.click(
+        fn=add_new_scene,
+        inputs=[new_scene_input, style_dropdown, steps, width, height, guidance],
         outputs=[gallery]
     )
 
