@@ -106,7 +106,7 @@ def refine_panel(index, new_prompt, style_name, steps, width, height, guidance_s
         height=height,
         width=width
     ).images[0]
-    gallery_images[index] = new_image
+    gallery_images[int(index)] = new_image
     return gallery_images
 
 # ====== Gradio UI ======
