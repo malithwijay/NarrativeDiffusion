@@ -25,6 +25,7 @@ models_dict = get_models_dict()
 pipe = None
 gallery_images = []
 caption_texts = []
+character_dict = {}
 processed_prompts = []
 original_prompts = []  # 🆕 Holds prompts used in generation
 
@@ -52,7 +53,7 @@ def setup_seed(seed):
 # ===== Main Generation =====
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
-    global gallery_images, caption_texts, original_prompts
+    global gallery_images, caption_texts, original_prompts, character_dict
 
     setup_seed(seed)
     character_dict, _ = character_to_dict(general_prompt)
