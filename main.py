@@ -23,11 +23,14 @@ DEFAULT_STYLE_NAME = "Japanese Anime"
 STYLE_NAMES = list(styles.keys())
 models_dict = get_models_dict()
 pipe = None
+
+# ===== State =====
 gallery_images = []
 caption_texts = []
 character_dict = {}
 processed_prompts = []
-original_prompts = []  # 🆕 Holds prompts used in generation
+original_prompts = []
+character_registry = {}  # 🆕 Persistent memory of characters and traits
 
 # ===== Load Comic Model =====
 model_name = "ComicModel"
@@ -50,21 +53,35 @@ def setup_seed(seed):
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
 
+# ===== Character Registry =====
+def update_character_registry(general_prompt):
+    global character_registry
+    char_dict, _ = character_to_dict(general_prompt)
+    for tag, desc in char_dict.items():
+        if tag not in character_registry:
+            character_registry[tag] = {"base": desc, "traits": []}
+    return char_dict
+
+def get_full_character_desc(tag):
+    entry = character_registry.get(tag, {})
+    base = entry.get("base", "")
+    traits = ", ".join(entry.get("traits", []))
+    return f"{base}, {traits}" if traits else base
+
 # ===== Main Generation =====
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
-    global gallery_images, caption_texts, original_prompts, character_dict
+    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
 
     setup_seed(seed)
-    character_dict, _ = character_to_dict(general_prompt)
+    character_dict = update_character_registry(general_prompt)
+
     prompts_raw = prompt_array.strip().splitlines()
     prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
     caption_texts = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
 
-    global processed_prompts
     _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
-
-    original_prompts = processed_prompts.copy()  # Save original prompts
+    original_prompts = processed_prompts.copy()
 
     gallery_images = []
     for prompt in processed_prompts:
@@ -88,26 +105,27 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
 
 # ===== Feedback Refinement Function =====
 def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
-    global gallery_images, processed_prompts, character_dict
+    global gallery_images, processed_prompts, character_dict, character_registry
 
     index = int(index)
-
-    # Use the original full prompt (story content)
     base_prompt = processed_prompts[index]
 
     # Extract character tag (e.g., [Tom])
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
-    base_character = character_dict.get(character_tag, "")
 
-    # Combine: character + original story + refinement
+    # Update character traits if new trait is added
     if refinement_text.strip():
-        final_prompt = f"{character_tag} {base_character}. {base_prompt}. {refinement_text.strip()}"
-    else:
-        final_prompt = f"{character_tag} {base_character}. {base_prompt}"
+        entry = character_registry.get(character_tag, {"base": "", "traits": []})
+        if refinement_text.strip() not in entry["traits"]:
+            entry["traits"].append(refinement_text.strip())
+        character_registry[character_tag] = entry
+
+    full_character = get_full_character_desc(character_tag)
+    final_prompt = f"{character_tag} {full_character}. {base_prompt}"
 
     styled_prompt = apply_style_positive(style_name, final_prompt)
 
-    setup_seed(random.randint(0, MAX_SEED))  # Optional: keep or make deterministic
+    setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
         num_inference_steps=steps,
@@ -119,35 +137,33 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     gallery_images[index] = new_image
     return gallery_images
 
-
-
 # ===== Gradio UI =====
-with gr.Blocks(title="NarrativeDiffusion with Feedback Refinement") as demo:
-    gr.Markdown("## 🎨 NarrativeDiffusion: Generate Comic-Style Story Panels with Feedback Refinement")
+with gr.Blocks(title="NarrativeDiffusion with Feedback Refinement & Trait Memory") as demo:
+    gr.Markdown("## 🧠 NarrativeDiffusion: Character Consistency with Trait Memory")
 
     with gr.Row():
         with gr.Column():
-            general_prompt = gr.Textbox(label="Character Descriptions", lines=2,
-                                        placeholder="[Tom] a boy with a red cape")
+            general_prompt = gr.Textbox(label="Character Descriptions", lines=3,
+                placeholder="[Tom] a boy with a red cape\n[Emma] a girl with silver hair")
             prompt_array = gr.Textbox(label="Story Prompts", lines=6,
-                                      placeholder="[Tom] runs into the woods. #He looks around nervously.")
+                placeholder="[Tom] runs into the woods. #He looks around nervously.")
             style_dropdown = gr.Dropdown(choices=STYLE_NAMES, value=DEFAULT_STYLE_NAME, label="Art Style")
             font_choice = gr.Dropdown(choices=[f for f in os.listdir("fonts") if f.endswith(".ttf")],
-                                      value="Inkfree.ttf", label="Font")
+                value="Inkfree.ttf", label="Font")
             steps = gr.Slider(20, 50, value=30, step=1, label="Sampling Steps")
             guidance = gr.Slider(1.0, 10.0, value=5.0, step=0.5, label="Guidance Scale")
             width = gr.Slider(512, 1024, step=64, value=768, label="Image Width")
             height = gr.Slider(512, 1024, step=64, value=768, label="Image Height")
             comic_type = gr.Radio(["Classic Comic Style", "Four Pannel", "No typesetting (default)"],
-                                  value="Classic Comic Style", label="Layout")
+                value="Classic Comic Style", label="Layout")
             seed = gr.Slider(0, MAX_SEED, value=0, step=1, label="Seed")
             run_button = gr.Button("Generate Story 🎬")
 
         with gr.Column():
             gallery = gr.Gallery(label="Generated Comic", columns=2, height="auto")
-            gr.Markdown("### 🛠️ Refine a Panel (edit only appearance, not story!)")
+            gr.Markdown("### 🔁 Refine a Panel (appearance or traits)")
             panel_selector = gr.Dropdown(choices=[], label="Select Panel to Refine")
-            refine_prompt = gr.Textbox(label="Modify this panel (e.g., 'Tom wears blue instead of red')")
+            refine_prompt = gr.Textbox(label="Add Trait or Visual Change", placeholder="Tom now has a wound on his leg")
             refine_btn = gr.Button("Refine Panel ✏️")
 
     run_button.click(
