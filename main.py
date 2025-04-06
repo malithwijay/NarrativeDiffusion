@@ -91,21 +91,23 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     global gallery_images, processed_prompts, character_dict
 
     index = int(index)
+
+    # Use the original full prompt (story content)
     base_prompt = processed_prompts[index]
 
-    # Attempt to extract the character tag (e.g., [Tom])
+    # Extract character tag (e.g., [Tom])
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
     base_character = character_dict.get(character_tag, "")
 
-    # Combine character base with refinement
+    # Combine: character + original story + refinement
     if refinement_text.strip():
-        final_prompt = f"{character_tag} {base_character}, {refinement_text.strip()}"
+        final_prompt = f"{character_tag} {base_character}. {base_prompt}. {refinement_text.strip()}"
     else:
-        final_prompt = f"{character_tag} {base_character}"
+        final_prompt = f"{character_tag} {base_character}. {base_prompt}"
 
     styled_prompt = apply_style_positive(style_name, final_prompt)
 
-    setup_seed(random.randint(0, MAX_SEED))
+    setup_seed(random.randint(0, MAX_SEED))  # Optional: keep or make deterministic
     new_image = pipe(
         styled_prompt,
         num_inference_steps=steps,
