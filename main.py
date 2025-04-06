@@ -25,6 +25,7 @@ models_dict = get_models_dict()
 pipe = None
 gallery_images = []
 caption_texts = []
+processed_prompts = []
 original_prompts = []  # 🆕 Holds prompts used in generation
 
 # ===== Load Comic Model =====
@@ -59,7 +60,9 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
     caption_texts = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
 
+    global processed_prompts
     _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
+
     original_prompts = processed_prompts.copy()  # Save original prompts
 
     gallery_images = []
@@ -89,7 +92,6 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Combine base prompt with refinement text ONLY if provided
     if refinement_text.strip():
         final_prompt = base_prompt + ", " + refinement_text.strip()
     else:
@@ -107,6 +109,7 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
 
     gallery_images[index] = new_image
     return gallery_images
+
 
 
 # ===== Gradio UI =====
