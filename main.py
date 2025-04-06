@@ -83,24 +83,31 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[0]), ""
 
 # ===== Feedback Refinement Function =====
-def refine_panel(index, new_text, style_name, steps, width, height, guidance_scale):
-    global gallery_images, original_prompts
+def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
+    global gallery_images, processed_prompts
 
-    idx = int(index)
-    base_prompt = original_prompts[idx]
+    index = int(index)
+    base_prompt = processed_prompts[index]
 
-    # Only apply refinement if user entered something
-    refined_prompt = base_prompt
-    if new_text.strip() != "":
-        refined_prompt = base_prompt + ", " + new_text.strip()
+    # Combine base prompt with refinement text ONLY if provided
+    if refinement_text.strip():
+        final_prompt = base_prompt + ", " + refinement_text.strip()
+    else:
+        final_prompt = base_prompt
 
-    styled_prompt = apply_style_positive(style_name, refined_prompt)
+    styled_prompt = apply_style_positive(style_name, final_prompt)
     setup_seed(random.randint(0, MAX_SEED))
-    new_image = pipe(styled_prompt, num_inference_steps=steps,
-                     guidance_scale=guidance_scale, height=height, width=width).images[0]
+    new_image = pipe(
+        styled_prompt,
+        num_inference_steps=steps,
+        guidance_scale=guidance_scale,
+        height=height,
+        width=width
+    ).images[0]
 
-    gallery_images[idx] = new_image
+    gallery_images[index] = new_image
     return gallery_images
+
 
 # ===== Gradio UI =====
 with gr.Blocks(title="NarrativeDiffusion with Feedback Refinement") as demo:
