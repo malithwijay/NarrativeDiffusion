@@ -32,6 +32,7 @@ processed_prompts = []
 original_prompts = []
 character_registry = {}  # Persistent memory of characters and traits
 current_style_name = DEFAULT_STYLE_NAME
+last_character_input = ""  # 🆕 Holds latest Define Characters input
 
 # ===== Load Comic Model =====
 model_name = "ComicModel"
@@ -54,6 +55,7 @@ def setup_seed(seed):
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
 
+# ===== Character Registry =====
 def update_character_registry(general_prompt):
     global character_registry
     char_dict, _ = character_to_dict(general_prompt)
@@ -71,9 +73,11 @@ def get_full_character_desc(tag):
 # ===== Main Generation =====
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
-    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts, current_style_name
+    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
+    global current_style_name, last_character_input
 
     current_style_name = style_name
+    last_character_input = general_prompt  # 🆕 Store Define Characters input
     setup_seed(seed)
     character_dict = update_character_registry(general_prompt)
 
@@ -104,21 +108,25 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Add New Scene (Fixed for consistency) =====
+# ===== Add New Scene (Fixed) =====
 def add_new_scene(new_scene_prompt, steps, width, height, guidance):
-    global gallery_images, processed_prompts, caption_texts, character_registry
+    global gallery_images, processed_prompts, caption_texts, last_character_input
 
+    # Ensure registry is up-to-date
+    update_character_registry(last_character_input)
+
+    # Extract caption and base
     prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
     caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
 
-    # Extract character tag
+    # Parse character tag
     character_tag = prompt.split("]")[0] + "]" if "]" in prompt else ""
-    full_character = get_full_character_desc(character_tag)
+    character_full = get_full_character_desc(character_tag)
 
-    # Rebuild full prompt using stored character memory and style
-    full_prompt = f"{character_tag} {full_character}. {prompt}"
+    # Rebuild consistent prompt
+    full_prompt = f"{character_tag} {character_full}. {prompt}"
+
     styled_prompt = apply_style_positive(current_style_name, full_prompt)
-
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -135,14 +143,14 @@ def add_new_scene(new_scene_prompt, steps, width, height, guidance):
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return gallery_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Feedback Refinement =====
+# ===== Feedback Refinement Function =====
 def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
-    global gallery_images, processed_prompts, character_dict, character_registry
+    global gallery_images, processed_prompts, character_registry
 
     index = int(index)
     base_prompt = processed_prompts[index]
-
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
+
     if refinement_text.strip():
         entry = character_registry.get(character_tag, {"base": "", "traits": []})
         if refinement_text.strip() not in entry["traits"]:
@@ -151,9 +159,10 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
 
     full_character = get_full_character_desc(character_tag)
     final_prompt = f"{character_tag} {full_character}. {base_prompt}"
-    styled_prompt = apply_style_positive(style_name, final_prompt)
 
+    styled_prompt = apply_style_positive(style_name, final_prompt)
     setup_seed(random.randint(0, MAX_SEED))
+
     new_image = pipe(
         styled_prompt,
         num_inference_steps=steps,
