@@ -30,9 +30,9 @@ caption_texts = []
 character_dict = {}
 processed_prompts = []
 original_prompts = []
-character_registry = {}  # Persistent memory of characters and traits
+character_registry = {}
 current_style_name = DEFAULT_STYLE_NAME
-last_character_input = ""  # 🆕 Holds latest Define Characters input
+latest_general_prompt = ""  # 🆕 stores last used Define Characters input
 
 # ===== Load Comic Model =====
 model_name = "ComicModel"
@@ -74,13 +74,13 @@ def get_full_character_desc(tag):
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
     global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
-    global current_style_name, last_character_input
+    global current_style_name, latest_general_prompt
 
     current_style_name = style_name
-    last_character_input = general_prompt  # 🆕 Store Define Characters input
+    latest_general_prompt = general_prompt  # 🆕 Store for later use
     setup_seed(seed)
-    character_dict = update_character_registry(general_prompt)
 
+    character_dict = update_character_registry(general_prompt)
     prompts_raw = prompt_array.strip().splitlines()
     prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
     caption_texts[:] = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
@@ -108,22 +108,19 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Add New Scene (Fixed) =====
+# ===== Add New Scene =====
 def add_new_scene(new_scene_prompt, steps, width, height, guidance):
-    global gallery_images, processed_prompts, caption_texts, last_character_input
+    global gallery_images, processed_prompts, caption_texts, character_dict
 
-    # Ensure registry is up-to-date
-    update_character_registry(last_character_input)
+    # ✅ Reuse latest general_prompt for consistency
+    character_dict = update_character_registry(latest_general_prompt)
 
-    # Extract caption and base
     prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
     caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
 
-    # Parse character tag
     character_tag = prompt.split("]")[0] + "]" if "]" in prompt else ""
     character_full = get_full_character_desc(character_tag)
 
-    # Rebuild consistent prompt
     full_prompt = f"{character_tag} {character_full}. {prompt}"
 
     styled_prompt = apply_style_positive(current_style_name, full_prompt)
@@ -143,7 +140,7 @@ def add_new_scene(new_scene_prompt, steps, width, height, guidance):
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return gallery_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Feedback Refinement Function =====
+# ===== Feedback Refinement =====
 def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
     global gallery_images, processed_prompts, character_registry
 
@@ -161,8 +158,8 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     final_prompt = f"{character_tag} {full_character}. {base_prompt}"
 
     styled_prompt = apply_style_positive(style_name, final_prompt)
-    setup_seed(random.randint(0, MAX_SEED))
 
+    setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
         num_inference_steps=steps,
@@ -175,8 +172,8 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
     return gallery_images
 
 # ===== Gradio UI =====
-with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator") as demo:
-    gr.Markdown("## 🧠 NarrativeDiffusion: Story Generator with Trait Memory & New Scene Addition")
+with gr.Blocks(title="NarrativeDiffusion") as demo:
+    gr.Markdown("## 🧠 NarrativeDiffusion: Consistent Multi-Scene Comic Generator")
 
     with gr.Row():
         with gr.Column():
