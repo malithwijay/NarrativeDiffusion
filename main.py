@@ -143,7 +143,7 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
 # ===== Updated Feedback Refinement =====
-def refine_paneldef(index, refinement_text, style_name, steps, width, height, guidance)::
+def refine_paneldef(index, refinement_text, style_name, steps, width, height, guidance):
     global gallery_images, processed_prompts, character_dict, character_registry
 
     index = int(index)
