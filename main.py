@@ -135,7 +135,6 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Refine Panel (Final Version with Trait Memory and Consistency) =====
 def refine_panel(index, refine_text, font_choice, steps, width, height, guidance, comic_type):
     global gallery_images, processed_prompts, character_dict, current_style_name
 
@@ -148,25 +147,31 @@ def refine_panel(index, refine_text, font_choice, steps, width, height, guidance
     if character_tag not in character_dict:
         return gallery_images, gr.update(), "Character not defined"
 
-    # Add trait if not already in character definition
+    # Add trait to character description
     if refine_text and refine_text.lower() not in character_dict[character_tag].lower():
         character_dict[character_tag] += ", " + refine_text.strip()
 
-    # Rebuild full prompt using updated character_dict
+    # Regenerate the prompt and image
     _, _, processed, _, _ = process_original_prompt(character_dict, [base_prompt], 0)
     styled_prompt = apply_style_positive(current_style_name, processed[0])
-
     setup_seed(random.randint(0, MAX_SEED))
-    new_image = pipe(styled_prompt, num_inference_steps=steps,
-                     guidance_scale=guidance, height=height, width=width).images[0]
+    new_image = pipe(
+        styled_prompt,
+        num_inference_steps=steps,
+        guidance_scale=guidance,
+        height=height,
+        width=width
+    ).images[0]
     gallery_images[index] = new_image
 
+    # Rebuild comic with updated caption layout
     font_path = os.path.join("fonts", font_choice)
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=str(index)), ""
+
 
 # ===== Gradio UI =====
 with gr.Blocks(title="NarrativeDiffusion") as demo:
