@@ -30,9 +30,9 @@ caption_texts = []
 character_dict = {}
 processed_prompts = []
 original_prompts = []
-character_registry = {}  # Persistent memory of characters and traits
+character_registry = {}
 current_style_name = DEFAULT_STYLE_NAME
-current_font_choice = "Inkfree.ttf"  # To preserve font between scenes
+current_character_input = ""
 
 # ===== Load Comic Model =====
 model_name = "ComicModel"
@@ -73,11 +73,10 @@ def get_full_character_desc(tag):
 # ===== Main Generation =====
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
-    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
-    global current_style_name, current_font_choice
+    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts, current_style_name, current_character_input
 
     current_style_name = style_name
-    current_font_choice = font_choice
+    current_character_input = general_prompt  # Store character input for reuse
     setup_seed(seed)
     character_dict = update_character_registry(general_prompt)
 
@@ -108,18 +107,20 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Add New Scene =====
-def add_new_scene(new_scene_prompt, steps, width, height, guidance):
-    global gallery_images, processed_prompts, caption_texts
+# ===== Add New Scene (FIXED: Uses same logic as process_generation) =====
+def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance, comic_type):
+    global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
+
+    if not new_scene_prompt.strip():
+        return gallery_images, gr.update(), "Enter a valid scene prompt"
+
+    # Reuse the existing character input and update registry
+    character_dict = update_character_registry(current_character_input)
 
     prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
     caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
-
-    character_tag = prompt.split("]")[0] + "]" if "]" in prompt else ""
-    character_full = get_full_character_desc(character_tag)
-
-    full_prompt = f"{character_tag} {character_full}. {prompt}"
-    styled_prompt = apply_style_positive(current_style_name, full_prompt)
+    _, _, processed, _, _ = process_original_prompt(character_dict, [prompt], 0)
+    styled_prompt = apply_style_positive(current_style_name, processed[0])
 
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
@@ -134,40 +135,49 @@ def add_new_scene(new_scene_prompt, steps, width, height, guidance):
     processed_prompts.append(prompt)
     caption_texts.append(caption)
 
-    panel_choices = [str(i) for i in range(len(gallery_images))]
-    return gallery_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+    font_path = os.path.join("fonts", font_choice)
+    font = ImageFont.truetype(font_path, 40)
+    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-# ===== Feedback Refinement Function (updated for consistency) =====
-def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
-    global gallery_images, processed_prompts, character_registry
+    panel_choices = [str(i) for i in range(len(gallery_images))]
+    return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+
+# ===== Feedback Refinement (Updated to match story generation flow) =====
+def refine_panel(index, refinement_text, font_choice, steps, width, height, guidance, comic_type):
+    global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
+    # Update character dict and registry
+    character_dict = update_character_registry(current_character_input)
 
-    # Update trait memory
+    # Inject refinement as part of prompt, keeping original meaning
+    full_prompt = base_prompt
     if refinement_text.strip():
-        entry = character_registry.get(character_tag, {"base": "", "traits": []})
-        if refinement_text.strip() not in entry["traits"]:
-            entry["traits"].append(refinement_text.strip())
-        character_registry[character_tag] = entry
+        full_prompt += f", {refinement_text.strip()}"
 
-    full_character = get_full_character_desc(character_tag)
-    full_prompt = f"{character_tag} {full_character}. {base_prompt}"
-    styled_prompt = apply_style_positive(current_style_name, full_prompt)
+    # Reprocess prompt like generation
+    _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
+    styled_prompt = apply_style_positive(current_style_name, processed[0])
 
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
         num_inference_steps=steps,
-        guidance_scale=guidance_scale,
+        guidance_scale=guidance,
         height=height,
         width=width
     ).images[0]
 
     gallery_images[index] = new_image
-    return gallery_images
+
+    # Regenerate full comic with updated panel to maintain layout
+    font_path = os.path.join("fonts", font_choice)
+    font = ImageFont.truetype(font_path, 40)
+    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
+
+    return comic_images
 
 # ===== Gradio UI =====
 with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator") as demo:
@@ -208,14 +218,14 @@ with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator
     )
 
     refine_btn.click(
-        fn=refine_panel,
-        inputs=[panel_selector, refine_prompt, style_dropdown, steps, width, height, guidance],
-        outputs=[gallery]
+       fn=refine_panel,
+       inputs=[panel_selector, refine_prompt, font_choice, steps, width, height, guidance, comic_type],
+       outputs=[gallery]
     )
 
     add_scene_btn.click(
         fn=add_new_scene,
-        inputs=[new_scene_input, steps, width, height, guidance],
+        inputs=[new_scene_input, font_choice, steps, width, height, guidance, comic_type],
         outputs=[gallery, panel_selector, refine_prompt]
     )
 
