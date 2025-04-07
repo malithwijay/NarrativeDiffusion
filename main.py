@@ -197,7 +197,8 @@ def refine_panel(index, refinement_text, font_choice, steps, width, height, guid
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    return comic_images
+    return comic_images, gr.update(choices=[str(i) for i in range(len(gallery_images))], value=str(index)), ""
+
 
 
 
@@ -244,8 +245,9 @@ with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator
     refine_btn.click(
         fn=refine_panel,
         inputs=[panel_selector, refine_prompt, font_choice, steps, width, height, guidance, comic_type],
-        outputs=[gallery]
+        outputs=[gallery, panel_selector, refine_prompt]  # update all 3 like Generate
     )
+
 
 
     add_scene_btn.click(
