@@ -144,34 +144,39 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
 
 # ===== Updated Feedback Refinement =====
 # ===== Updated Feedback Refinement (Consistent with Add Scene & Generate Story) =====
+# ===== Updated Feedback Refinement =====
 def refine_panel(index, refinement_text, font_choice, steps, width, height, guidance, comic_type):
     global gallery_images, processed_prompts, character_registry, current_style_name
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Extract character tag and possible new base description
+    # Detect character tag
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
-    new_base = None
+    
+    # Check if refinement adds a trait (e.g., "Tom has a scar")
+    trait_to_add = ""
+    if character_tag and refinement_text.strip().lower().startswith(character_tag.lower()):
+        # If input starts with [Character], extract new trait
+        trait_to_add = refinement_text.strip().split("]", 1)[-1].strip()
+    else:
+        trait_to_add = refinement_text.strip()
 
-    if refinement_text.strip().startswith(character_tag):
-        new_base = refinement_text.strip().split("]")[-1].strip()
-
-    # Update base description only if a new one is given
+    # Add trait if not already present
     if character_tag in character_registry:
-        if new_base:
-            character_registry[character_tag]["base"] = new_base
+        if trait_to_add and trait_to_add not in character_registry[character_tag]["traits"]:
+            character_registry[character_tag]["traits"].append(trait_to_add)
 
-    # Get full updated character description
-    base = character_registry.get(character_tag, {}).get("base", "")
-    traits = character_registry.get(character_tag, {}).get("traits", [])
+    # Get full character with traits
+    entry = character_registry.get(character_tag, {})
+    base = entry.get("base", "")
+    traits = entry.get("traits", [])
     full_character = f"{base}, {', '.join(traits)}" if traits else base
 
-    # Final styled prompt (use original panel story prompt)
+    # Build styled prompt using original story context
     final_prompt = f"{character_tag} {full_character}. {base_prompt}"
     styled_prompt = apply_style_positive(current_style_name, final_prompt)
 
-    # Reseed and regenerate
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -180,15 +185,15 @@ def refine_panel(index, refinement_text, font_choice, steps, width, height, guid
         height=height,
         width=width
     ).images[0]
-
     gallery_images[index] = new_image
 
-    # Rebuild the comic layout using original captions
+    # Re-render all panels with updated font and caption layout
     font_path = os.path.join("fonts", font_choice)
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
     return comic_images
+
 
 
 # ===== Gradio UI =====
