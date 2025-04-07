@@ -150,28 +150,28 @@ def refine_panel(index, refinement_text, font_choice, steps, width, height, guid
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Parse character tag from refinement
-    character_tag = ""
-    if "]" in refinement_text:
-        character_tag = refinement_text.split("]")[0] + "]"
-        new_base = refinement_text.split("]")[1].strip()
+    # Extract character tag and possible new base description
+    character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
+    new_base = None
 
-        # Update the base description if defined
-        if character_tag in character_registry:
+    if refinement_text.strip().startswith(character_tag):
+        new_base = refinement_text.strip().split("]")[-1].strip()
+
+    # Update base description only if a new one is given
+    if character_tag in character_registry:
+        if new_base:
             character_registry[character_tag]["base"] = new_base
-    else:
-        # fallback: extract tag from the base prompt
-        character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
 
-    # Combine updated base with traits
+    # Get full updated character description
     base = character_registry.get(character_tag, {}).get("base", "")
     traits = character_registry.get(character_tag, {}).get("traits", [])
     full_character = f"{base}, {', '.join(traits)}" if traits else base
 
-    # Full prompt (same as generate/add scene)
-    full_prompt = f"{character_tag} {full_character}. {base_prompt}"
-    styled_prompt = apply_style_positive(current_style_name, full_prompt)
+    # Final styled prompt (use original panel story prompt)
+    final_prompt = f"{character_tag} {full_character}. {base_prompt}"
+    styled_prompt = apply_style_positive(current_style_name, final_prompt)
 
+    # Reseed and regenerate
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -181,14 +181,15 @@ def refine_panel(index, refinement_text, font_choice, steps, width, height, guid
         width=width
     ).images[0]
 
-    # Update image and re-render gallery
     gallery_images[index] = new_image
 
+    # Rebuild the comic layout using original captions
     font_path = os.path.join("fonts", font_choice)
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
     return comic_images
+
 
 # ===== Gradio UI =====
 with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator") as demo:
@@ -230,9 +231,10 @@ with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator
 
     refine_btn.click(
         fn=refine_panel,
-    inputs=[panel_selector, refine_prompt, font_choice, steps, width, height, guidance, comic_type],
-    outputs=[gallery]
+        inputs=[panel_selector, refine_prompt, font_choice, steps, width, height, guidance, comic_type],
+        outputs=[gallery]
     )
+
 
     add_scene_btn.click(
         fn=add_new_scene,
