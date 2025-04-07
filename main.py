@@ -142,46 +142,31 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Feedback Refinement (Final Fix) =====
-def refine_panel(index, refinement_text, font_choice, steps, width, height, guidance, comic_type):
-    global gallery_images, processed_prompts, character_registry, current_style_name, current_character_input
+# ===== Refine Panel (Consistent & Persistent Trait Update) =====
+def refine_panel(index, refine_text, font_choice, steps, width, height, guidance, comic_type):
+    global gallery_images, processed_prompts, character_dict
 
     index = int(index)
+    if index >= len(processed_prompts):
+        return gallery_images, gr.update(), "Invalid panel index"
+
     base_prompt = processed_prompts[index]
 
-    # Step 1: Reparse characters to ensure consistency
-    character_dict = update_character_registry(current_character_input)
-
-    # Step 2: Extract character tag
+    # Detect character tag from base prompt
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
-    if not character_tag:
-        return gallery_images
+    if character_tag not in character_dict:
+        return gallery_images, gr.update(), "Character tag not found"
 
-    # Step 3: Ensure character exists
-    if character_tag not in character_registry:
-        desc = character_dict.get(character_tag, "")
-        character_registry[character_tag] = {"base": desc, "traits": []}
+    # Add new trait if not already in character_dict
+    existing_desc = character_dict[character_tag]
+    if refine_text.strip().lower() not in existing_desc.lower():
+        character_dict[character_tag] = existing_desc + ", " + refine_text.strip()
 
-    # Step 4: Update trait memory
-    if refinement_text.strip().startswith(character_tag):
-        # Overwrite base
-        new_base = refinement_text.strip().split("]")[-1].strip()
-        if new_base:
-            character_registry[character_tag]["base"] = new_base
-    else:
-        # Add trait if not present
-        trait = refinement_text.strip()
-        if trait and trait not in character_registry[character_tag]["traits"]:
-            character_registry[character_tag]["traits"].append(trait)
+    # Rebuild full prompt using updated character_dict
+    _, _, updated_prompt, _, _ = process_original_prompt(character_dict, [base_prompt], 0)
+    styled_prompt = apply_style_positive(current_style_name, updated_prompt[0])
 
-    # Step 5: Build updated full character description
-    full_character = get_full_character_desc(character_tag)
-
-    # Step 6: Rebuild styled prompt using same logic
-    prompt_for_this_panel = processed_prompts[index]
-    _, _, processed, _, _ = process_original_prompt({character_tag: full_character}, [prompt_for_this_panel], 0)
-    styled_prompt = apply_style_positive(current_style_name, processed[0])
-
+    # Generate refined image
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -192,14 +177,14 @@ def refine_panel(index, refinement_text, font_choice, steps, width, height, guid
     ).images[0]
     gallery_images[index] = new_image
 
-    # Step 7: Re-render with font
+    # Re-render layout
     font_path = os.path.join("fonts", font_choice)
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    return comic_images, gr.update(choices=[str(i) for i in range(len(gallery_images))], value=str(index)), ""
-
-
+    # Update dropdown and return
+    panel_choices = [str(i) for i in range(len(gallery_images))]
+    return comic_images, gr.update(choices=panel_choices, value=str(index)), ""
 
 
 
@@ -245,7 +230,7 @@ with gr.Blocks(title="NarrativeDiffusion: Consistent Multi-Scene Comic Generator
     refine_btn.click(
         fn=refine_panel,
         inputs=[panel_selector, refine_prompt, font_choice, steps, width, height, guidance, comic_type],
-        outputs=[gallery, panel_selector, refine_prompt]  # update all 3 like Generate
+        outputs=[gallery, panel_selector, refine_prompt]
     )
 
 
