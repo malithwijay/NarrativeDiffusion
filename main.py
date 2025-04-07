@@ -54,7 +54,6 @@ def setup_seed(seed):
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
 
-# ===== Character Registry =====
 def update_character_registry(general_prompt):
     global character_registry
     char_dict, _ = character_to_dict(general_prompt)
@@ -105,22 +104,21 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Add New Scene =====
+# ===== Add New Scene (Fixed for consistency) =====
 def add_new_scene(new_scene_prompt, steps, width, height, guidance):
-    global gallery_images, processed_prompts, caption_texts
+    global gallery_images, processed_prompts, caption_texts, character_registry
 
-    # Extract caption and base
     prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
     caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
 
-    # Parse character tag
+    # Extract character tag
     character_tag = prompt.split("]")[0] + "]" if "]" in prompt else ""
-    character_full = get_full_character_desc(character_tag)
+    full_character = get_full_character_desc(character_tag)
 
-    # Rebuild consistent prompt
-    full_prompt = f"{character_tag} {character_full}. {prompt}"
-
+    # Rebuild full prompt using stored character memory and style
+    full_prompt = f"{character_tag} {full_character}. {prompt}"
     styled_prompt = apply_style_positive(current_style_name, full_prompt)
+
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
         styled_prompt,
@@ -137,17 +135,14 @@ def add_new_scene(new_scene_prompt, steps, width, height, guidance):
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return gallery_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Feedback Refinement Function =====
+# ===== Feedback Refinement =====
 def refine_panel(index, refinement_text, style_name, steps, width, height, guidance_scale):
     global gallery_images, processed_prompts, character_dict, character_registry
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Extract character tag (e.g., [Tom])
     character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
-
-    # Update trait memory
     if refinement_text.strip():
         entry = character_registry.get(character_tag, {"base": "", "traits": []})
         if refinement_text.strip() not in entry["traits"]:
@@ -156,7 +151,6 @@ def refine_panel(index, refinement_text, style_name, steps, width, height, guida
 
     full_character = get_full_character_desc(character_tag)
     final_prompt = f"{character_tag} {full_character}. {base_prompt}"
-
     styled_prompt = apply_style_positive(style_name, final_prompt)
 
     setup_seed(random.randint(0, MAX_SEED))
