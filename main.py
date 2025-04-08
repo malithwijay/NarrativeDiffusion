@@ -16,7 +16,7 @@ from utils.utils import get_comic
 from utils.style_template import styles
 from utils.load_models_utils import get_models_dict, load_models
 
-# ===== Constants and Globals =====
+#Constants and Globals
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MAX_SEED = 2147483647
 DEFAULT_STYLE_NAME = "Japanese Anime"
@@ -24,7 +24,7 @@ STYLE_NAMES = list(styles.keys())
 models_dict = get_models_dict()
 pipe = None
 
-# ===== State =====
+#State
 gallery_images = []
 caption_texts = []
 character_dict = {}
@@ -34,7 +34,7 @@ character_registry = {}
 current_style_name = DEFAULT_STYLE_NAME
 current_character_input = ""
 
-# ===== Load Comic Model =====
+#Load Comic Model
 model_name = "ComicModel"
 model_info = models_dict[model_name]
 pipe = load_models(model_info, device=device)
@@ -44,7 +44,7 @@ pipe.enable_freeu(s1=0.6, s2=0.4, b1=1.1, b2=1.2)
 if device != "mps":
     pipe.enable_model_cpu_offload()
 
-# ===== Utils =====
+#Utils
 def apply_style_positive(style_name: str, positive: str):
     p, _ = styles.get(style_name, styles[DEFAULT_STYLE_NAME])
     return p.replace("{prompt}", positive)
@@ -69,7 +69,7 @@ def get_full_character_desc(tag):
     traits = ", ".join(entry.get("traits", []))
     return f"{base}, {traits}" if traits else base
 
-# ===== Main Generation =====
+# Main Generation
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
     global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
@@ -107,7 +107,7 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Add Scene =====
+#Add Scene
 def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance, comic_type):
     global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
 
@@ -135,7 +135,7 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Feedback Refinement (Updated to match story generation flow) =====
+#Feedback Refinement (Updated to match story generation flow) 
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
     global gallery_images, processed_prompts, caption_texts, current_character_input
 
@@ -149,7 +149,7 @@ def refine_panel(index, refinement_text, style_name, font_choice, steps, width, 
         full_prompt += f", {refinement_text.strip()}"
 
     _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
-    styled_prompt = apply_style_positive(style_name, processed[0])  # ✅ use passed style_name always
+    styled_prompt = apply_style_positive(style_name, processed[0])  # use passed style_name always
 
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
@@ -170,9 +170,9 @@ def refine_panel(index, refinement_text, style_name, font_choice, steps, width, 
 
 
 
-# ===== Gradio UI =====
+#Gradio UI 
 with gr.Blocks(title="NarrativeDiffusion") as demo:
-    gr.Markdown("## 🎨 NarrativeDiffusion: Comic Generator with Feedback Refinement")
+    gr.Markdown("## 🎨 NarrativeDiffusion: Comic Story Generator with Feedback Refinement")
 
     with gr.Row():
         with gr.Column():

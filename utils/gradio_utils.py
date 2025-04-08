@@ -48,6 +48,5 @@ def is_torch2_available():
 
 
 class AttnProcessor:
-    # Stub if you're not using anything advanced
     def __init__(self):
         pass

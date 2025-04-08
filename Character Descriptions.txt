@@ -14,3 +14,16 @@ Modify this panel
 Add a New Scene
 [Luna] ran into her home in the road.
 
+
+second prompt:
+
+Character Descriptions
+[Luna] a curious girl with silver hair and a blue hooded cloak
+
+Story Prompts
+[Luna] walks through a quiet enchanted forest. #She hears a soft whisper.
+[Luna] discovers a glowing stone under a tree. #She picks it up with awe.
+[Luna] holds the stone tightly as magical vines begin to glow around her. #The air shimmers.
+[Luna] follows the light and finds a mysterious portal. #She looks back one last time before stepping in.
+
+
