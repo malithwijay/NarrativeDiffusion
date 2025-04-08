@@ -16,7 +16,7 @@ from utils.utils import get_comic
 from utils.style_template import styles
 from utils.load_models_utils import get_models_dict, load_models
 
-# Constants and Globals
+#Constants and Globals
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MAX_SEED = 2147483647
 DEFAULT_STYLE_NAME = "Japanese Anime"
