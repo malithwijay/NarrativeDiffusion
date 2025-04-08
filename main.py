@@ -16,7 +16,7 @@ from utils.utils import get_comic
 from utils.style_template import styles
 from utils.load_models_utils import get_models_dict, load_models
 
-#Constants and Globals
+# Constants and Globals
 device = "cuda" if torch.cuda.is_available() else "cpu"
 MAX_SEED = 2147483647
 DEFAULT_STYLE_NAME = "Japanese Anime"
@@ -24,7 +24,7 @@ STYLE_NAMES = list(styles.keys())
 models_dict = get_models_dict()
 pipe = None
 
-#State
+# State
 gallery_images = []
 caption_texts = []
 character_dict = {}
@@ -34,7 +34,7 @@ character_registry = {}
 current_style_name = DEFAULT_STYLE_NAME
 current_character_input = ""
 
-#Load Comic Model
+# Load Comic Model
 model_name = "ComicModel"
 model_info = models_dict[model_name]
 pipe = load_models(model_info, device=device)
@@ -44,7 +44,7 @@ pipe.enable_freeu(s1=0.6, s2=0.4, b1=1.1, b2=1.2)
 if device != "mps":
     pipe.enable_model_cpu_offload()
 
-#Utils
+# Utils
 def apply_style_positive(style_name: str, positive: str):
     p, _ = styles.get(style_name, styles[DEFAULT_STYLE_NAME])
     return p.replace("{prompt}", positive)
@@ -72,52 +72,47 @@ def get_full_character_desc(tag):
 # Main Generation
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
-    try:
-        global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
-        global current_style_name, current_character_input
+    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
+    global current_style_name, current_character_input
 
-        current_style_name = style_name
-        current_character_input = general_prompt
-        setup_seed(seed)
-        character_dict = update_character_registry(general_prompt)
+    current_style_name = style_name
+    current_character_input = general_prompt
+    setup_seed(seed)
+    character_dict = update_character_registry(general_prompt)
 
-        prompts_raw = prompt_array.strip().splitlines()
-        prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
-        caption_texts[:] = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
+    prompts_raw = prompt_array.strip().splitlines()
+    prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
+    caption_texts[:] = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
 
-        _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
-        original_prompts[:] = processed_prompts.copy()
+    _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
+    original_prompts[:] = processed_prompts.copy()
 
-        gallery_images.clear()
-        for prompt in processed_prompts:
-            styled_prompt = apply_style_positive(style_name, prompt)
-            result = pipe(styled_prompt, num_inference_steps=steps,
-                          guidance_scale=guidance_scale,
-                          height=height, width=width).images[0]
-            gallery_images.append(result)
+    gallery_images.clear()
+    for prompt in processed_prompts:
+        styled_prompt = apply_style_positive(style_name, prompt)
+        result = pipe(styled_prompt, num_inference_steps=steps,
+                      guidance_scale=guidance_scale,
+                      height=height, width=width).images[0]
+        gallery_images.append(result)
 
-        font_path = os.path.join("fonts", font_choice)
-        font = ImageFont.truetype(font_path, 40)
-        comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
+    font_path = os.path.join("fonts", font_choice)
+    font = ImageFont.truetype(font_path, 40)
+    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-        output_dir = f"output/out_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        os.makedirs(output_dir, exist_ok=True)
-        for idx, img in enumerate(comic_images):
-            img.save(f"{output_dir}/img{idx + 1}.png")
+    output_dir = f"output/out_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    os.makedirs(output_dir, exist_ok=True)
+    for idx, img in enumerate(comic_images):
+        img.save(f"{output_dir}/img{idx + 1}.png")
 
-        panel_choices = [str(i) for i in range(len(gallery_images))]
-        return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+    panel_choices = [str(i) for i in range(len(gallery_images))]
+    return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-    except Exception as e:
-        return gallery_images, gr.update(), f"<span style='color:red'> Error in generation: {str(e)}</span>"
-
-#Add Scene
+# Add Scene
 def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance, comic_type):
+    global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
     try:
-        global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
-
         if not new_scene_prompt.strip():
-            return gallery_images, gr.update(), "<span style='color:red'> Enter a valid scene prompt</span>"
+            return gallery_images, gr.update(), "", "Enter a valid scene prompt"
 
         character_dict = update_character_registry(current_character_input)
         prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
@@ -138,18 +133,19 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
         comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
         panel_choices = [str(i) for i in range(len(gallery_images))]
-        return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+        return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), "", ""
 
     except Exception as e:
-        return gallery_images, gr.update(), f"<span style='color:red'> Error adding scene: {str(e)}</span>"
+        return gallery_images, gr.update(), "", f"Error: {str(e)}"
 
-#Feedback Refinement (Updated to match story generation flow) 
+# Feedback Refinement
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
-    try:
-        global gallery_images, processed_prompts, caption_texts, current_character_input
+    global gallery_images, processed_prompts, caption_texts, current_character_input
 
+    try:
         index = int(index)
         base_prompt = processed_prompts[index]
+
         character_dict = update_character_registry(current_character_input)
 
         full_prompt = base_prompt
@@ -175,14 +171,12 @@ def refine_panel(index, refinement_text, style_name, font_choice, steps, width, 
         comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
         return comic_images
-    except Exception as e:
+    except:
         return gallery_images
 
-#Gradio UI 
+# Gradio UI
 with gr.Blocks(title="NarrativeDiffusion") as demo:
     gr.Markdown("## 🎨 NarrativeDiffusion: Comic Story Generator with Feedback Refinement")
-
-    error_label = gr.HTML(label="")
 
     with gr.Row():
         with gr.Column():
@@ -211,7 +205,7 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
             gr.Markdown("---")
             new_scene_input = gr.Textbox(label="➕ Add a New Scene", placeholder="[Tom] enters the cave. #It's dark.")
             add_scene_btn = gr.Button("Add Scene ➕")
-            error_label = gr.HTML("")  
+            error_box = gr.Textbox(label="Error Messages", interactive=False)
 
     run_button.click(
         fn=process_generation,
@@ -228,7 +222,7 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
     add_scene_btn.click(
         fn=add_new_scene,
         inputs=[new_scene_input, font_choice, steps, width, height, guidance, comic_type],
-        outputs=[gallery, panel_selector, refine_prompt, error_label],
+        outputs=[gallery, panel_selector, refine_prompt, error_box]
     )
 
 demo.launch(share=True)
