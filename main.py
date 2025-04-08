@@ -137,22 +137,19 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
 
 # ===== Feedback Refinement (Updated to match story generation flow) =====
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
-    global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
+    global gallery_images, processed_prompts, caption_texts, current_character_input
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Update character dict and registry
     character_dict = update_character_registry(current_character_input)
 
-    # Inject refinement as part of prompt, keeping original meaning
     full_prompt = base_prompt
     if refinement_text.strip():
         full_prompt += f", {refinement_text.strip()}"
 
-    # Reprocess prompt like generation
     _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
-    styled_prompt = apply_style_positive(style_name, processed[0])
+    styled_prompt = apply_style_positive(style_name, processed[0])  # ✅ use passed style_name always
 
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
@@ -165,13 +162,11 @@ def refine_panel(index, refinement_text, style_name, font_choice, steps, width, 
 
     gallery_images[index] = new_image
 
-    # Regenerate full comic with updated panel to maintain layout
     font_path = os.path.join("fonts", font_choice)
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
     return comic_images
-
 
 
 
