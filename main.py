@@ -136,7 +136,7 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
 # ===== Feedback Refinement (Updated to match story generation flow) =====
-def refine_panel(index, refinement_text, font_choice, steps, width, height, guidance, comic_type):
+def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
     global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
 
     index = int(index)
@@ -152,7 +152,7 @@ def refine_panel(index, refinement_text, font_choice, steps, width, height, guid
 
     # Reprocess prompt like generation
     _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
-    styled_prompt = apply_style_positive(current_style_name, processed[0])
+    styled_prompt = apply_style_positive(style_name, processed[0])
 
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
@@ -181,15 +181,20 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
 
     with gr.Row():
         with gr.Column():
-            general_prompt = gr.Textbox(label="Define Characters", lines=3)
-            prompt_array = gr.Textbox(label="Story Prompts", lines=6)
-            style_dropdown = gr.Dropdown(choices=STYLE_NAMES, value=DEFAULT_STYLE_NAME, label="Art Style")
-            font_choice = gr.Dropdown(choices=[f for f in os.listdir("fonts") if f.endswith(".ttf")], value="Inkfree.ttf", label="Font")
+            general_prompt = gr.Textbox(label="Define Characters", lines=3,
+                placeholder="[Tom] a boy with a red cape\n[Emma] a girl with silver hair")
+            prompt_array = gr.Textbox(label="Story Prompts", lines=6,
+                placeholder="[Tom] walks into the forest. #He is scared.")
+            style_dropdown = gr.Dropdown(choices=STYLE_NAMES, 
+                value=DEFAULT_STYLE_NAME, label="Art Style")
+            font_choice = gr.Dropdown(choices=[f for f in os.listdir("fonts") if f.endswith(".ttf")], 
+                value="Inkfree.ttf", label="Font")
             steps = gr.Slider(20, 50, value=30, label="Sampling Steps")
             guidance = gr.Slider(1.0, 10.0, value=5.0, label="Guidance Scale")
             width = gr.Slider(512, 1024, step=64, value=768, label="Image Width")
             height = gr.Slider(512, 1024, step=64, value=768, label="Image Height")
-            comic_type = gr.Radio(["Classic Comic Style", "Four Pannel", "No typesetting (default)"], value="Classic Comic Style", label="Layout")
+            comic_type = gr.Radio(["Classic Comic Style", "Four Pannel", "No typesetting (default)"], 
+                value="Classic Comic Style", label="Layout")
             seed = gr.Slider(0, MAX_SEED, value=0, label="Seed")
             run_button = gr.Button("🖼️ Generate Story")
 
@@ -210,7 +215,7 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
 
     refine_btn.click(
        fn=refine_panel,
-       inputs=[panel_selector, refine_prompt, font_choice, steps, width, height, guidance, comic_type],
+       inputs=[panel_selector, refine_prompt,style_dropdown,font_choice, steps, width, height, guidance, comic_type],
        outputs=[gallery]
     )
 
