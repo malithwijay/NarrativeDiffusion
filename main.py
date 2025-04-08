@@ -72,103 +72,111 @@ def get_full_character_desc(tag):
 # Main Generation
 def process_generation(seed, style_name, general_prompt, prompt_array, font_choice,
                        steps, width, height, guidance_scale, comic_type):
-    global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
-    global current_style_name, current_character_input
+    try:
+        global gallery_images, caption_texts, original_prompts, character_dict, processed_prompts
+        global current_style_name, current_character_input
 
-    current_style_name = style_name
-    current_character_input = general_prompt
-    setup_seed(seed)
-    character_dict = update_character_registry(general_prompt)
+        current_style_name = style_name
+        current_character_input = general_prompt
+        setup_seed(seed)
+        character_dict = update_character_registry(general_prompt)
 
-    prompts_raw = prompt_array.strip().splitlines()
-    prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
-    caption_texts[:] = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
+        prompts_raw = prompt_array.strip().splitlines()
+        prompts_clean = [line.split("#")[0].replace("[NC]", "").strip() for line in prompts_raw]
+        caption_texts[:] = [line.split("#")[-1].strip() if "#" in line else "" for line in prompts_raw]
 
-    _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
-    original_prompts[:] = processed_prompts.copy()
+        _, _, processed_prompts, _, _ = process_original_prompt(character_dict, prompts_clean, 0)
+        original_prompts[:] = processed_prompts.copy()
 
-    gallery_images.clear()
-    for prompt in processed_prompts:
-        styled_prompt = apply_style_positive(style_name, prompt)
-        result = pipe(styled_prompt, num_inference_steps=steps,
-                      guidance_scale=guidance_scale,
-                      height=height, width=width).images[0]
-        gallery_images.append(result)
+        gallery_images.clear()
+        for prompt in processed_prompts:
+            styled_prompt = apply_style_positive(style_name, prompt)
+            result = pipe(styled_prompt, num_inference_steps=steps,
+                          guidance_scale=guidance_scale,
+                          height=height, width=width).images[0]
+            gallery_images.append(result)
 
-    font_path = os.path.join("fonts", font_choice)
-    font = ImageFont.truetype(font_path, 40)
-    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
+        font_path = os.path.join("fonts", font_choice)
+        font = ImageFont.truetype(font_path, 40)
+        comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    output_dir = f"output/out_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    os.makedirs(output_dir, exist_ok=True)
-    for idx, img in enumerate(comic_images):
-        img.save(f"{output_dir}/img{idx + 1}.png")
+        output_dir = f"output/out_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        os.makedirs(output_dir, exist_ok=True)
+        for idx, img in enumerate(comic_images):
+            img.save(f"{output_dir}/img{idx + 1}.png")
 
-    panel_choices = [str(i) for i in range(len(gallery_images))]
-    return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+        panel_choices = [str(i) for i in range(len(gallery_images))]
+        return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+
+    except Exception as e:
+        return gallery_images, gr.update(), f"Error in generation: {str(e)}"
 
 #Add Scene
 def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance, comic_type):
-    global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
+    try:
+        global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
 
-    if not new_scene_prompt.strip():
-        return gallery_images, gr.update(), "Enter a valid scene prompt"
+        if not new_scene_prompt.strip():
+            return gallery_images, gr.update(), "Enter a valid scene prompt"
 
-    character_dict = update_character_registry(current_character_input)
-    prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
-    caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
-    _, _, processed, _, _ = process_original_prompt(character_dict, [prompt], 0)
-    styled_prompt = apply_style_positive(current_style_name, processed[0])
+        character_dict = update_character_registry(current_character_input)
+        prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
+        caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
+        _, _, processed, _, _ = process_original_prompt(character_dict, [prompt], 0)
+        styled_prompt = apply_style_positive(current_style_name, processed[0])
 
-    setup_seed(random.randint(0, MAX_SEED))
-    new_image = pipe(styled_prompt, num_inference_steps=steps,
-                     guidance_scale=guidance, height=height, width=width).images[0]
+        setup_seed(random.randint(0, MAX_SEED))
+        new_image = pipe(styled_prompt, num_inference_steps=steps,
+                         guidance_scale=guidance, height=height, width=width).images[0]
 
-    gallery_images.append(new_image)
-    processed_prompts.append(prompt)
-    caption_texts.append(caption)
+        gallery_images.append(new_image)
+        processed_prompts.append(prompt)
+        caption_texts.append(caption)
 
-    font_path = os.path.join("fonts", font_choice)
-    font = ImageFont.truetype(font_path, 40)
-    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
+        font_path = os.path.join("fonts", font_choice)
+        font = ImageFont.truetype(font_path, 40)
+        comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    panel_choices = [str(i) for i in range(len(gallery_images))]
-    return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
+        panel_choices = [str(i) for i in range(len(gallery_images))]
+        return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-#Feedback Refinement (Updated to match story generation flow) 
+    except Exception as e:
+        return gallery_images, gr.update(), f"Error adding scene: {str(e)}"
+
+#Feedback Refinement 
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
-    global gallery_images, processed_prompts, caption_texts, current_character_input
+    try:
+        global gallery_images, processed_prompts, caption_texts, current_character_input
 
-    index = int(index)
-    base_prompt = processed_prompts[index]
+        index = int(index)
+        base_prompt = processed_prompts[index]
+        character_dict = update_character_registry(current_character_input)
 
-    character_dict = update_character_registry(current_character_input)
+        full_prompt = base_prompt
+        if refinement_text.strip():
+            full_prompt += f", {refinement_text.strip()}"
 
-    full_prompt = base_prompt
-    if refinement_text.strip():
-        full_prompt += f", {refinement_text.strip()}"
+        _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
+        styled_prompt = apply_style_positive(style_name, processed[0])
 
-    _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
-    styled_prompt = apply_style_positive(style_name, processed[0])  # use passed style_name always
+        setup_seed(random.randint(0, MAX_SEED))
+        new_image = pipe(
+            styled_prompt,
+            num_inference_steps=steps,
+            guidance_scale=guidance,
+            height=height,
+            width=width
+        ).images[0]
 
-    setup_seed(random.randint(0, MAX_SEED))
-    new_image = pipe(
-        styled_prompt,
-        num_inference_steps=steps,
-        guidance_scale=guidance,
-        height=height,
-        width=width
-    ).images[0]
+        gallery_images[index] = new_image
 
-    gallery_images[index] = new_image
+        font_path = os.path.join("fonts", font_choice)
+        font = ImageFont.truetype(font_path, 40)
+        comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    font_path = os.path.join("fonts", font_choice)
-    font = ImageFont.truetype(font_path, 40)
-    comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
-
-    return comic_images
-
-
+        return comic_images
+    except Exception as e:
+        return gallery_images
 
 #Gradio UI 
 with gr.Blocks(title="NarrativeDiffusion") as demo:
@@ -210,7 +218,7 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
 
     refine_btn.click(
        fn=refine_panel,
-       inputs=[panel_selector, refine_prompt,style_dropdown,font_choice, steps, width, height, guidance, comic_type],
+       inputs=[panel_selector, refine_prompt, style_dropdown, font_choice, steps, width, height, guidance, comic_type],
        outputs=[gallery]
     )
 
