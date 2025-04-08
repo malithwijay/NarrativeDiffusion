@@ -109,7 +109,7 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
         return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
     except Exception as e:
-        return gallery_images, gr.update(), f"Error in generation: {str(e)}"
+        return gallery_images, gr.update(), f"<span style='color:red'> Error in generation: {str(e)}</span>"
 
 #Add Scene
 def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance, comic_type):
@@ -117,7 +117,7 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
         global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
 
         if not new_scene_prompt.strip():
-            return gallery_images, gr.update(), "Enter a valid scene prompt"
+            return gallery_images, gr.update(), "<span style='color:red'> Enter a valid scene prompt</span>"
 
         character_dict = update_character_registry(current_character_input)
         prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
@@ -141,9 +141,9 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
         return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
     except Exception as e:
-        return gallery_images, gr.update(), f"Error adding scene: {str(e)}"
+        return gallery_images, gr.update(), f"<span style='color:red'> Error adding scene: {str(e)}</span>"
 
-#Feedback Refinement 
+#Feedback Refinement (Updated to match story generation flow) 
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
     try:
         global gallery_images, processed_prompts, caption_texts, current_character_input
@@ -182,6 +182,8 @@ def refine_panel(index, refinement_text, style_name, font_choice, steps, width, 
 with gr.Blocks(title="NarrativeDiffusion") as demo:
     gr.Markdown("## 🎨 NarrativeDiffusion: Comic Story Generator with Feedback Refinement")
 
+    error_label = gr.HTML(label="")
+
     with gr.Row():
         with gr.Column():
             general_prompt = gr.Textbox(label="Define Characters", lines=3,
@@ -209,6 +211,7 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
             gr.Markdown("---")
             new_scene_input = gr.Textbox(label="➕ Add a New Scene", placeholder="[Tom] enters the cave. #It's dark.")
             add_scene_btn = gr.Button("Add Scene ➕")
+            error_label = gr.HTML("")  
 
     run_button.click(
         fn=process_generation,
@@ -225,7 +228,7 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
     add_scene_btn.click(
         fn=add_new_scene,
         inputs=[new_scene_input, font_choice, steps, width, height, guidance, comic_type],
-        outputs=[gallery, panel_selector, refine_prompt]
+        outputs=[gallery, panel_selector, refine_prompt, error_label],
     )
 
 demo.launch(share=True)
