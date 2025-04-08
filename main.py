@@ -114,13 +114,16 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     if not new_scene_prompt.strip():
         return gallery_images, gr.update(), "Enter a valid scene prompt"
 
+    # Use the existing character_dict (which includes refinements)
+    prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
+    caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
+
+    # Get full character descriptions with traits
     full_character_dict = {
         tag: get_full_character_desc(tag)
         for tag in character_dict.keys()
     }
 
-    prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
-    caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
     _, _, processed, _, _ = process_original_prompt(full_character_dict, [prompt], 0)
     styled_prompt = apply_style_positive(current_style_name, processed[0])
 
@@ -144,29 +147,22 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
 
-# ===== Refine Panel (with Persistent Trait Memory) =====
+
+# ===== Feedback Refinement (Updated to match story generation flow) =====
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
-    global gallery_images, processed_prompts, caption_texts, current_character_input, character_dict
+    global gallery_images, processed_prompts, caption_texts, current_character_input
 
     index = int(index)
     base_prompt = processed_prompts[index]
 
-    # Update registry
-    updated_dict = update_character_registry(current_character_input)
-    character_dict.update(updated_dict)
+    character_dict = update_character_registry(current_character_input)
 
-    character_tag = base_prompt.split("]")[0] + "]" if "]" in base_prompt else ""
-    if character_tag not in character_registry:
-        return gallery_images, gr.update(), "Character not defined"
+    full_prompt = base_prompt
+    if refinement_text.strip():
+        full_prompt += f", {refinement_text.strip()}"
 
-    if refinement_text and refinement_text.lower() not in [t.lower() for t in character_registry[character_tag]["traits"]]:
-        character_registry[character_tag]["traits"].append(refinement_text.strip())
-
-    full_character = get_full_character_desc(character_tag)
-    character_dict[character_tag] = full_character
-
-    _, _, processed, _, _ = process_original_prompt(character_dict, [base_prompt], 0)
-    styled_prompt = apply_style_positive(style_name, processed[0])
+    _, _, processed, _, _ = process_original_prompt(character_dict, [full_prompt], 0)
+    styled_prompt = apply_style_positive(style_name, processed[0])  # ✅ use passed style_name always
 
     setup_seed(random.randint(0, MAX_SEED))
     new_image = pipe(
@@ -183,7 +179,8 @@ def refine_panel(index, refinement_text, style_name, font_choice, steps, width, 
     font = ImageFont.truetype(font_path, 40)
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
-    return comic_images, gr.update(choices=[str(i) for i in range(len(gallery_images))], value=str(index)), ""
+    return comic_images
+
 
 
 # ===== Gradio UI =====
@@ -226,8 +223,8 @@ with gr.Blocks(title="NarrativeDiffusion") as demo:
 
     refine_btn.click(
        fn=refine_panel,
-       inputs=[panel_selector, refine_prompt, style_dropdown, font_choice, steps, width, height, guidance, comic_type],
-       outputs=[gallery, panel_selector, refine_prompt]
+       inputs=[panel_selector, refine_prompt,style_dropdown,font_choice, steps, width, height, guidance, comic_type],
+       outputs=[gallery]
     )
 
     add_scene_btn.click(
