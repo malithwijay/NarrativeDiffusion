@@ -156,7 +156,7 @@ def refine_panel(index, refine_text, font_choice, steps, width, height, guidance
             return gallery_images, gr.update(), "Character not defined"
 
     # Add new trait (if not already present)
-    if refine_text and refine_text.lower() not in character_registry[character_tag]["traits"]:
+    if refine_text and refine_text.lower() not in [t.lower() for t in character_registry[character_tag]["traits"]]:
         character_registry[character_tag]["traits"].append(refine_text.strip())
 
     # Rebuild prompt
@@ -176,7 +176,9 @@ def refine_panel(index, refine_text, font_choice, steps, width, height, guidance
     comic_images = get_comic(gallery_images, comic_type, caption_texts, font)
 
     panel_choices = [str(i) for i in range(len(gallery_images))]
+
     return comic_images, gr.update(choices=panel_choices, value=str(index)), ""
+
 
 
 # ===== Gradio UI =====
