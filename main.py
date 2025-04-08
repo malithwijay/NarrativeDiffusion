@@ -109,32 +109,20 @@ def process_generation(seed, style_name, general_prompt, prompt_array, font_choi
 
 # ===== Add Scene =====
 def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance, comic_type):
-    global gallery_images, processed_prompts, caption_texts, character_dict, current_style_name
+    global gallery_images, processed_prompts, caption_texts, current_character_input, current_style_name
 
     if not new_scene_prompt.strip():
         return gallery_images, gr.update(), "Enter a valid scene prompt"
 
-    # Use the existing character_dict (which includes refinements)
+    character_dict = update_character_registry(current_character_input)
     prompt = new_scene_prompt.split("#")[0].replace("[NC]", "").strip()
     caption = new_scene_prompt.split("#")[-1].strip() if "#" in new_scene_prompt else ""
-
-    # Get full character descriptions with traits
-    full_character_dict = {
-        tag: get_full_character_desc(tag)
-        for tag in character_dict.keys()
-    }
-
-    _, _, processed, _, _ = process_original_prompt(full_character_dict, [prompt], 0)
+    _, _, processed, _, _ = process_original_prompt(character_dict, [prompt], 0)
     styled_prompt = apply_style_positive(current_style_name, processed[0])
 
     setup_seed(random.randint(0, MAX_SEED))
-    new_image = pipe(
-        styled_prompt,
-        num_inference_steps=steps,
-        guidance_scale=guidance,
-        height=height,
-        width=width
-    ).images[0]
+    new_image = pipe(styled_prompt, num_inference_steps=steps,
+                     guidance_scale=guidance, height=height, width=width).images[0]
 
     gallery_images.append(new_image)
     processed_prompts.append(prompt)
@@ -146,7 +134,6 @@ def add_new_scene(new_scene_prompt, font_choice, steps, width, height, guidance,
 
     panel_choices = [str(i) for i in range(len(gallery_images))]
     return comic_images, gr.update(choices=panel_choices, value=panel_choices[-1]), ""
-
 
 # ===== Feedback Refinement (Updated to match story generation flow) =====
 def refine_panel(index, refinement_text, style_name, font_choice, steps, width, height, guidance, comic_type):
